@@ -1,0 +1,185 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 263 70% 50%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 224 71% 8%;
+    --card-foreground: 213 31% 91%;
+    --popover: 224 71% 6%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 263 70% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 223 47% 14%;
+    --secondary-foreground: 213 31% 91%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 216 34% 17%;
+    --accent-foreground: 213 31% 91%;
+    --destructive: 0 63% 55%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 263 70% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Prose styles for markdown rendering */
+.prose-interview {
+  @apply text-foreground leading-relaxed;
+}
+
+.prose-interview h1 {
+  @apply text-2xl font-bold text-foreground mt-6 mb-3 pb-2 border-b border-border;
+}
+
+.prose-interview h2 {
+  @apply text-xl font-semibold text-foreground mt-5 mb-2;
+}
+
+.prose-interview h3 {
+  @apply text-lg font-medium text-foreground mt-4 mb-2;
+}
+
+.prose-interview p {
+  @apply mb-3 text-sm leading-7;
+}
+
+.prose-interview ul {
+  @apply mb-3 pl-5 space-y-1;
+}
+
+.prose-interview li {
+  @apply text-sm leading-6 list-disc;
+}
+
+.prose-interview strong {
+  @apply font-semibold text-foreground;
+}
+
+.prose-interview em {
+  @apply italic text-muted-foreground;
+}
+
+.prose-interview code {
+  @apply bg-muted px-1.5 py-0.5 rounded text-xs font-mono;
+}
+
+.prose-interview pre {
+  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-3;
+}
+
+.prose-interview blockquote {
+  @apply border-l-4 border-primary pl-4 italic text-muted-foreground my-3;
+}
+
+.prose-interview table {
+  @apply w-full border-collapse mb-3;
+}
+
+.prose-interview th {
+  @apply border border-border px-3 py-2 bg-muted font-semibold text-left text-sm;
+}
+
+.prose-interview td {
+  @apply border border-border px-3 py-2 text-sm;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, hsl(var(--primary)), #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-primary {
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+}
+
+.glow-primary:hover {
+  box-shadow: 0 0 40px hsl(var(--primary) / 0.5);
+}
+
+/* Shimmer animation for skeleton */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--accent)) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Streaming cursor */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: '▊';
+  animation: blink 1s ease-in-out infinite;
+  color: hsl(var(--primary));
+}

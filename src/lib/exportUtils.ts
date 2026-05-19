@@ -82,7 +82,8 @@ export async function exportToPDF(content: string, title: string): Promise<void>
 export async function exportToDOCX(content: string, title: string): Promise<void> {
   const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
 
-  const paragraphs: Paragraph[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const paragraphs: any[] = [];
 
   // Title
   paragraphs.push(
@@ -132,7 +133,8 @@ export async function exportToDOCX(content: string, title: string): Promise<void
       );
     } else if (line.startsWith('- ') || line.startsWith('* ')) {
       const text = line.replace(/^[-*] /, '');
-      const runs: TextRun[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const runs: any[] = [];
       const parts = text.split(/\*\*(.*?)\*\*/g);
       parts.forEach((part, i) => {
         runs.push(new TextRun({ text: part, bold: i % 2 === 1 }));
@@ -141,7 +143,8 @@ export async function exportToDOCX(content: string, title: string): Promise<void
     } else if (line.trim() === '') {
       paragraphs.push(new Paragraph({ text: '' }));
     } else {
-      const runs: TextRun[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const runs: any[] = [];
       const parts = line.split(/\*\*(.*?)\*\*/g);
       parts.forEach((part, i) => {
         runs.push(new TextRun({ text: part, bold: i % 2 === 1 }));
