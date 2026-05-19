@@ -1,0 +1,114 @@
+'use client';
+
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import type { AnalysisType, AnalysisHistory, AppSettings, ActiveView } from '@/types';
+
+interface AppState {
+  // Core analysis state
+  transcript: string;
+  analysisType: AnalysisType;
+  result: string;
+  isLoading: boolean;
+  isStreaming: boolean;
+  error: string | null;
+  uploadedFiles: File[];
+  activeView: ActiveView;
+
+  // Persisted state
+  history: AnalysisHistory[];
+  settings: AppSettings;
+
+  // Actions
+  setTranscript: (transcript: string) => void;
+  setAnalysisType: (type: AnalysisType) => void;
+  setResult: (result: string) => void;
+  appendToResult: (chunk: string) => void;
+  setLoading: (loading: boolean) => void;
+  setStreaming: (streaming: boolean) => void;
+  setError: (error: string | null) => void;
+  setUploadedFiles: (files: File[]) => void;
+  setActiveView: (view: ActiveView) => void;
+  addToHistory: (entry: AnalysisHistory) => void;
+  clearHistory: () => void;
+  deleteHistoryEntry: (id: string) => void;
+  updateSettings: (settings: Partial<AppSettings>) => void;
+  clearAll: () => void;
+  restoreFromHistory: (entry: AnalysisHistory) => void;
+}
+
+const defaultSettings: AppSettings = {
+  groqApiKey: '',
+  model: 'llama-3.3-70b-versatile',
+  temperature: 0.3,
+  maxTokens: 4096,
+  theme: 'dark',
+};
+
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      transcript: '',
+      analysisType: 'candidate',
+      result: '',
+      isLoading: false,
+      isStreaming: false,
+      error: null,
+      uploadedFiles: [],
+      activeView: 'analysis',
+      history: [],
+      settings: defaultSettings,
+
+      setTranscript: (transcript) => set({ transcript }),
+      setAnalysisType: (analysisType) => set({ analysisType }),
+      setResult: (result) => set({ result }),
+      appendToResult: (chunk) =>
+        set((state) => ({ result: state.result + chunk })),
+      setLoading: (isLoading) => set({ isLoading }),
+      setStreaming: (isStreaming) => set({ isStreaming }),
+      setError: (error) => set({ error }),
+      setUploadedFiles: (uploadedFiles) => set({ uploadedFiles }),
+      setActiveView: (activeView) => set({ activeView }),
+
+      addToHistory: (entry) =>
+        set((state) => ({
+          history: [entry, ...state.history].slice(0, 50),
+        })),
+
+      clearHistory: () => set({ history: [] }),
+
+      deleteHistoryEntry: (id) =>
+        set((state) => ({
+          history: state.history.filter((h) => h.id !== id),
+        })),
+
+      updateSettings: (newSettings) =>
+        set((state) => ({
+          settings: { ...state.settings, ...newSettings },
+        })),
+
+      clearAll: () =>
+        set({
+          transcript: '',
+          result: '',
+          error: null,
+          uploadedFiles: [],
+        }),
+
+      restoreFromHistory: (entry) =>
+        set({
+          transcript: entry.transcript,
+          analysisType: entry.analysisType,
+          result: entry.result,
+          activeView: 'analysis',
+        }),
+    }),
+    {
+      name: 'interview-evaluator-storage',
+      partialize: (state) => ({
+        history: state.history,
+        settings: state.settings,
+      }),
+    }
+  )
+);
