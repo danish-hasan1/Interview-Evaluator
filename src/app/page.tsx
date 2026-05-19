@@ -25,6 +25,7 @@ function AnalysisView() {
   const appendToResult = useAppStore((s) => s.appendToResult);
   const setLoading    = useAppStore((s) => s.setLoading);
   const setStreaming   = useAppStore((s) => s.setStreaming);
+  const error         = useAppStore((s) => s.error);
   const setError      = useAppStore((s) => s.setError);
   const addToHistory  = useAppStore((s) => s.addToHistory);
 
