@@ -6,6 +6,9 @@ import { buildPrompt as buildTaSummaryPrompt } from '@/prompts/taSummary';
 import { buildPrompt as buildInterviewerAuditPrompt } from '@/prompts/interviewerAudit';
 import type { AnalysisType, AppSettings } from '@/types';
 
+// Allow up to 60s for long transcript analysis on Vercel
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -30,8 +33,7 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       return new Response(
         JSON.stringify({
-          error:
-            'Groq API key not configured. Please add your API key in Settings.',
+          error: 'Groq API key not configured. Please add your API key in Settings.',
         }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
@@ -41,32 +43,25 @@ export async function POST(request: NextRequest) {
 
     let prompt: string;
     switch (analysisType) {
-      case 'candidate':
-        prompt = buildCandidatePrompt(transcript);
-        break;
-      case 'interviewer':
-        prompt = buildInterviewerPrompt(transcript);
-        break;
-      case 'taSummary':
-        prompt = buildTaSummaryPrompt(transcript);
-        break;
-      case 'interviewerAudit':
-        prompt = buildInterviewerAuditPrompt(transcript);
-        break;
-      default:
-        prompt = buildCandidatePrompt(transcript);
+      case 'candidate':       prompt = buildCandidatePrompt(transcript);       break;
+      case 'interviewer':     prompt = buildInterviewerPrompt(transcript);     break;
+      case 'taSummary':       prompt = buildTaSummaryPrompt(transcript);       break;
+      case 'interviewerAudit':prompt = buildInterviewerAuditPrompt(transcript);break;
+      default:                prompt = buildCandidatePrompt(transcript);
     }
 
     const temperature = settings?.temperature ?? 0.3;
-    const maxTokens = settings?.maxTokens ?? 4096;
-    const model = settings?.model || 'llama-3.3-70b-versatile';
+    const model       = settings?.model || 'llama-3.3-70b-versatile';
 
+    // No max_tokens cap — let the model use its full output window (32 768 tokens).
+    // llama-3.3-70b-versatile has a 128k context window for input and
+    // up to 32 768 output tokens, so even large transcripts and long
+    // analyses will complete without truncation.
     const stream = await groq.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
       stream: true,
       temperature,
-      max_tokens: maxTokens,
     });
 
     const encoder = new TextEncoder();
@@ -81,7 +76,11 @@ export async function POST(request: NextRequest) {
           }
           controller.close();
         } catch (err) {
-          controller.error(err);
+          // Surface the error as readable text in the stream so the
+          // client displays it instead of silently receiving nothing.
+          const message = err instanceof Error ? err.message : 'Stream error occurred';
+          controller.enqueue(encoder.encode(`\n\n> **Analysis Error:** ${message}`));
+          controller.close();
         }
       },
     });
@@ -95,8 +94,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Analysis API error:', error);
-    const message =
-      error instanceof Error ? error.message : 'An unexpected error occurred';
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

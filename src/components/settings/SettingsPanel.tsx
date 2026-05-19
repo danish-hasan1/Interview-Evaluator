@@ -165,18 +165,18 @@ export function SettingsPanel() {
               id="maxTokens"
               type="number"
               min={512}
-              max={8192}
+              max={32768}
               step={256}
               value={localSettings.maxTokens}
               onChange={(e) =>
                 setLocalSettings({
                   ...localSettings,
-                  maxTokens: parseInt(e.target.value) || 4096,
+                  maxTokens: parseInt(e.target.value) || 32768,
                 })
               }
             />
             <p className="text-xs text-muted-foreground">
-              Maximum response length. 4096 recommended for detailed analyses.
+              Maximum output tokens (up to 32768). Leave at default for complete analyses — no limit is applied by the engine.
             </p>
           </div>
         </CardContent>

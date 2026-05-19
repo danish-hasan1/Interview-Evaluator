@@ -41,7 +41,7 @@ const defaultSettings: AppSettings = {
   groqApiKey: '',
   model: 'llama-3.3-70b-versatile',
   temperature: 0.3,
-  maxTokens: 4096,
+  maxTokens: 32768,
   theme: 'dark',
 };
 
