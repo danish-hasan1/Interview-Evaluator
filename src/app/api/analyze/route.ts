@@ -6,23 +6,59 @@ import { buildPrompt as buildTaSummaryPrompt } from '@/prompts/taSummary';
 import { buildPrompt as buildInterviewerAuditPrompt } from '@/prompts/interviewerAudit';
 import type { AnalysisType, AppSettings } from '@/types';
 
-// Allow up to 60s for long transcript analysis on Vercel
 export const maxDuration = 60;
+
+// Conservative safe limit: 11 000 tokens of input (chars / 4 ≈ tokens).
+// Free Groq tier allows 12 000 TPM; our largest prompt template uses ~650
+// tokens, leaving ~11 350 for transcript. We truncate at 44 000 chars
+// (~11 000 tokens) so there is always headroom for the prompt wrapper.
+const MAX_TRANSCRIPT_CHARS = 44_000;
+
+function truncateTranscript(text: string): { text: string; truncated: boolean } {
+  if (text.length <= MAX_TRANSCRIPT_CHARS) return { text, truncated: false };
+  // Truncate at the last newline before the limit so we don't cut mid-sentence
+  const cutoff = text.lastIndexOf('\n', MAX_TRANSCRIPT_CHARS);
+  const safeIndex = cutoff > MAX_TRANSCRIPT_CHARS * 0.8 ? cutoff : MAX_TRANSCRIPT_CHARS;
+  return {
+    text: text.slice(0, safeIndex),
+    truncated: true,
+  };
+}
+
+function friendlyGroqError(error: unknown): string {
+  if (error instanceof Error) {
+    const msg = error.message;
+    // Groq rate limit / too large
+    if (msg.includes('rate_limit_exceeded') || msg.includes('Request too large') || msg.includes('tokens per minute')) {
+      return 'Transcript is too long for your Groq plan\'s token limit. Try splitting the transcript into smaller sections, or upgrade to a paid Groq tier at console.groq.com/settings/billing';
+    }
+    if (msg.includes('401') || msg.includes('invalid_api_key') || msg.includes('Authentication')) {
+      return 'Invalid Groq API key. Please check your key in Settings.';
+    }
+    if (msg.includes('429')) {
+      return 'Groq rate limit reached. Please wait a moment and try again.';
+    }
+    // Strip raw JSON from error messages
+    try {
+      const parsed = JSON.parse(msg);
+      return parsed?.error?.message ?? msg;
+    } catch {
+      return msg;
+    }
+  }
+  return 'An unexpected error occurred. Please try again.';
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      transcript,
-      analysisType,
-      settings,
-    }: {
+    const { transcript, analysisType, settings }: {
       transcript: string;
       analysisType: AnalysisType;
       settings?: Partial<AppSettings>;
     } = body;
 
-    if (!transcript || transcript.trim().length === 0) {
+    if (!transcript?.trim()) {
       return new Response(
         JSON.stringify({ error: 'Transcript is required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -32,31 +68,30 @@ export async function POST(request: NextRequest) {
     const apiKey = settings?.groqApiKey || process.env.GROQ_API_KEY;
     if (!apiKey) {
       return new Response(
-        JSON.stringify({
-          error: 'Groq API key not configured. Please add your API key in Settings.',
-        }),
+        JSON.stringify({ error: 'Groq API key not configured. Please add your API key in Settings.' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const groq = new Groq({ apiKey });
+    // Truncate if transcript exceeds safe token limit
+    const { text: safeTranscript, truncated } = truncateTranscript(transcript);
+    const truncationNotice = truncated
+      ? `> ⚠️ **Note:** This transcript exceeded the token limit and was trimmed to the first ~44 000 characters for analysis. For full coverage, split the transcript into parts and run separate analyses.\n\n`
+      : '';
 
     let prompt: string;
     switch (analysisType) {
-      case 'candidate':       prompt = buildCandidatePrompt(transcript);       break;
-      case 'interviewer':     prompt = buildInterviewerPrompt(transcript);     break;
-      case 'taSummary':       prompt = buildTaSummaryPrompt(transcript);       break;
-      case 'interviewerAudit':prompt = buildInterviewerAuditPrompt(transcript);break;
-      default:                prompt = buildCandidatePrompt(transcript);
+      case 'candidate':        prompt = buildCandidatePrompt(safeTranscript);        break;
+      case 'interviewer':      prompt = buildInterviewerPrompt(safeTranscript);      break;
+      case 'taSummary':        prompt = buildTaSummaryPrompt(safeTranscript);        break;
+      case 'interviewerAudit': prompt = buildInterviewerAuditPrompt(safeTranscript); break;
+      default:                 prompt = buildCandidatePrompt(safeTranscript);
     }
 
     const temperature = settings?.temperature ?? 0.3;
     const model       = settings?.model || 'llama-3.3-70b-versatile';
 
-    // No max_tokens cap — let the model use its full output window (32 768 tokens).
-    // llama-3.3-70b-versatile has a 128k context window for input and
-    // up to 32 768 output tokens, so even large transcripts and long
-    // analyses will complete without truncation.
+    const groq = new Groq({ apiKey });
     const stream = await groq.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
@@ -67,19 +102,19 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
+        // If we truncated, prepend a visible warning in the streamed output
+        if (truncationNotice) {
+          controller.enqueue(encoder.encode(truncationNotice));
+        }
         try {
           for await (const chunk of stream) {
             const text = chunk.choices[0]?.delta?.content || '';
-            if (text) {
-              controller.enqueue(encoder.encode(text));
-            }
+            if (text) controller.enqueue(encoder.encode(text));
           }
           controller.close();
         } catch (err) {
-          // Surface the error as readable text in the stream so the
-          // client displays it instead of silently receiving nothing.
-          const message = err instanceof Error ? err.message : 'Stream error occurred';
-          controller.enqueue(encoder.encode(`\n\n> **Analysis Error:** ${message}`));
+          const msg = friendlyGroqError(err);
+          controller.enqueue(encoder.encode(`\n\n> **Error:** ${msg}`));
           controller.close();
         }
       },
@@ -89,12 +124,10 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Transfer-Encoding': 'chunked',
-        'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch (error) {
-    console.error('Analysis API error:', error);
-    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+    const message = friendlyGroqError(error);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
