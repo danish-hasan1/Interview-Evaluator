@@ -7,11 +7,17 @@ import { Upload, File, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
 
+const ALLOWED_EXTENSIONS = ['txt', 'pdf', 'docx'];
+
 interface UploadedFile {
   name: string;
   size: number;
   status: 'parsing' | 'success' | 'error';
   error?: string;
+}
+
+function getExtension(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() ?? '';
 }
 
 async function parseFileViaAPI(file: File): Promise<string> {
@@ -39,9 +45,9 @@ function mergeTranscripts(texts: string[]): string {
 }
 
 export function FileUpload() {
-  const transcript = useAppStore((s) => s.transcript);
+  const transcript    = useAppStore((s) => s.transcript);
   const setTranscript = useAppStore((s) => s.setTranscript);
-  const analysisType = useAppStore((s) => s.analysisType);
+  const analysisType  = useAppStore((s) => s.analysisType);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -49,16 +55,33 @@ export function FileUpload() {
 
   const processFiles = useCallback(
     async (files: File[]) => {
-      const newFiles: UploadedFile[] = files.map((f) => ({
-        name: f.name,
-        size: f.size,
-        status: 'parsing' as const,
-      }));
-      setUploadedFiles((prev) => [...prev, ...newFiles]);
+      // Filter by extension — avoids MIME type mismatch across browsers/OS
+      const validFiles = files.filter((f) =>
+        ALLOWED_EXTENSIONS.includes(getExtension(f.name))
+      );
+      const invalidFiles = files.filter(
+        (f) => !ALLOWED_EXTENSIONS.includes(getExtension(f.name))
+      );
+
+      // Mark unsupported files immediately
+      const newEntries: UploadedFile[] = [
+        ...validFiles.map((f) => ({
+          name: f.name,
+          size: f.size,
+          status: 'parsing' as const,
+        })),
+        ...invalidFiles.map((f) => ({
+          name: f.name,
+          size: f.size,
+          status: 'error' as const,
+          error: `Unsupported type. Use .txt, .pdf, or .docx`,
+        })),
+      ];
+      setUploadedFiles((prev) => [...prev, ...newEntries]);
 
       const parsedTexts: string[] = [];
 
-      for (const file of files) {
+      for (const file of validFiles) {
         try {
           const text = await parseFileViaAPI(file);
           parsedTexts.push(text);
@@ -70,8 +93,7 @@ export function FileUpload() {
             )
           );
         } catch (err) {
-          const errorMsg =
-            err instanceof Error ? err.message : 'Failed to parse file';
+          const errorMsg = err instanceof Error ? err.message : 'Failed to parse file';
           setUploadedFiles((prev) =>
             prev.map((f) =>
               f.name === file.name && f.status === 'parsing'
@@ -83,12 +105,10 @@ export function FileUpload() {
       }
 
       if (parsedTexts.length > 0) {
-        let newText: string;
-        if (isMultiple && parsedTexts.length > 1) {
-          newText = mergeTranscripts(parsedTexts);
-        } else {
-          newText = parsedTexts.join('\n\n');
-        }
+        const newText =
+          isMultiple && parsedTexts.length > 1
+            ? mergeTranscripts(parsedTexts)
+            : parsedTexts.join('\n\n');
         setTranscript(transcript ? `${transcript}\n\n${newText}` : newText);
       }
     },
@@ -97,22 +117,18 @@ export function FileUpload() {
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop: processFiles,
-    accept: {
-      'text/plain': ['.txt'],
-      'application/pdf': ['.pdf'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        ['.docx'],
-    },
+    // No MIME-type accept filter — browsers report DOCX as application/zip or
+    // application/octet-stream on many systems, causing false rejections.
+    // Extension validation is done inside processFiles instead.
     multiple: isMultiple,
-    onDragEnter: () => setIsDragging(true),
-    onDragLeave: () => setIsDragging(false),
+    onDragEnter:   () => setIsDragging(true),
+    onDragLeave:   () => setIsDragging(false),
     onDropAccepted: () => setIsDragging(false),
     onDropRejected: () => setIsDragging(false),
   });
 
-  const removeFile = (name: string) => {
+  const removeFile  = (name: string) =>
     setUploadedFiles((prev) => prev.filter((f) => f.name !== name));
-  };
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -128,7 +144,7 @@ export function FileUpload() {
           Upload Transcript{isMultiple ? 's' : ''}
         </span>
         <span className="text-xs text-muted-foreground">
-          .txt, .pdf, .docx{isMultiple ? ' · Multiple files' : ''}
+          .txt · .pdf · .docx{isMultiple ? ' · Multiple files' : ''}
         </span>
       </div>
 
@@ -152,9 +168,7 @@ export function FileUpload() {
         </motion.div>
         <div>
           <p className="text-sm font-medium text-foreground">
-            {isDragging
-              ? 'Drop files here...'
-              : 'Drop files or click to browse'}
+            {isDragging ? 'Drop files here...' : 'Drop files or click to browse'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {isMultiple
@@ -164,7 +178,7 @@ export function FileUpload() {
         </div>
       </div>
 
-      {/* File List */}
+      {/* File list */}
       <AnimatePresence>
         {uploadedFiles.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -176,33 +190,23 @@ export function FileUpload() {
                 exit={{ opacity: 0, y: -10 }}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm',
-                  file.status === 'success' &&
-                    'border-emerald-500/30 bg-emerald-500/5',
-                  file.status === 'error' &&
-                    'border-destructive/30 bg-destructive/5',
+                  file.status === 'success' && 'border-emerald-500/30 bg-emerald-500/5',
+                  file.status === 'error'   && 'border-destructive/30 bg-destructive/5',
                   file.status === 'parsing' && 'border-border bg-muted/50'
                 )}
               >
                 <File className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
                 <div className="flex-1 min-w-0">
-                  <p className="truncate text-foreground font-medium">
-                    {file.name}
-                  </p>
+                  <p className="truncate text-foreground font-medium">{file.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {file.error || formatSize(file.size)}
                   </p>
                 </div>
-                {file.status === 'parsing' && (
-                  <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
-                )}
-                {file.status === 'success' && (
-                  <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                )}
-                {file.status === 'error' && (
-                  <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
-                )}
+                {file.status === 'parsing' && <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />}
+                {file.status === 'success' && <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+                {file.status === 'error'   && <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />}
                 <button
-                  onClick={() => removeFile(file.name)}
+                  onClick={(e) => { e.stopPropagation(); removeFile(file.name); }}
                   className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-accent transition-colors"
                 >
                   <X className="w-3 h-3 text-muted-foreground" />

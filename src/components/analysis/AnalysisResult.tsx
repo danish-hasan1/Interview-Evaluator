@@ -113,7 +113,7 @@ export function AnalysisResult() {
               key="content"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="p-6 overflow-y-auto max-h-[600px]"
+              className="p-6"
             >
               <div className="prose-interview">
                 <ReactMarkdown

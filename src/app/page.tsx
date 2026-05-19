@@ -28,7 +28,7 @@ function AnalysisView() {
   const setError      = useAppStore((s) => s.setError);
   const addToHistory  = useAppStore((s) => s.addToHistory);
 
-  const showResult = result.length > 0 || isLoading;
+  const showResult = result.length > 0 || isLoading || !!error;
 
   const handleAnalyze = async () => {
     if (!transcript.trim()) return;
