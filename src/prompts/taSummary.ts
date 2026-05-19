@@ -1,34 +1,56 @@
 export function buildPrompt(transcript: string): string {
-  return `You are a senior talent acquisition specialist. Generate a concise, recruiter-friendly summary of this interview.
+  return `You are a senior talent acquisition specialist preparing an internal summary for a hiring team.
 
-Produce:
+Convert the interview transcript into a concise, professional, recruiter-ready format.
 
-## Executive Summary
-2-3 sentence overview of the candidate and interview outcome.
+---
 
-## Candidate Snapshot
-- Name/Role applied for (if mentioned)
-- Current level vs. target level
-- Key strengths (3 bullets)
-- Key concerns (3 bullets)
+## RULES
 
-## Hiring Recommendation
-STRONG HIRE | HIRE | BORDERLINE | NO HIRE
-Brief justification (2-3 sentences)
+- Be objective and evidence-based. No emotional language.
+- Keep each section tight and actionable.
+- Treat candidate quality and interviewer quality as separate assessments.
+- If evidence is absent for a point, omit it rather than speculate.
+- This summary will be read by hiring managers and TA leadership — it must be credible and precise.
 
-## Risk Assessment
-- Technical Risk: LOW / MEDIUM / HIGH
-- Culture Risk: LOW / MEDIUM / HIGH
-- Retention Risk: LOW / MEDIUM / HIGH
-Brief notes on each risk.
+---
 
-## Suggested Next Steps
-Specific recruiter action items.
+## OUTPUT FORMAT
 
-## Recruiter Notes
-Any process notes, follow-up questions to ask, or areas to probe in subsequent interviews.
+## TA Interview Summary
 
-Keep the tone professional, concise, and actionable. This summary will be shared with hiring managers.
+### Candidate Summary
+_(5–7 concise bullet points covering: key strengths, notable gaps, communication quality, role alignment, and overall impression)_
+
+---
+
+### Interviewer Assessment
+_(5 concise bullet points covering: question quality, probing depth, structure, whether the interview was capable of differentiating candidates, and any concerns)_
+
+---
+
+### Risks Identified
+_(Bullet points — distinguish between candidate risks and process/interviewer risks)_
+- **Candidate Risk:** [e.g., shallow technical depth, inconsistent ownership language]
+- **Process Risk:** [e.g., interviewer did not probe claims, structure was incomplete]
+
+---
+
+### Recommended Next Step
+**[PROCEED TO NEXT ROUND / ADDITIONAL TECHNICAL ROUND / HOLD PENDING REVIEW / REJECT]**
+_(1–2 sentence justification)_
+
+---
+
+### Suggested Areas to Probe in Next Round
+_(If proceeding — list specific topics or gaps that must be addressed in follow-up interviews)_
+
+---
+
+### TA Notes
+_(Anything the recruiting team should be aware of before the next touchpoint: candidate expectations, role calibration concerns, interviewer quality flags, or process recommendations)_
+
+---
 
 TRANSCRIPT:
 ${transcript}`;
