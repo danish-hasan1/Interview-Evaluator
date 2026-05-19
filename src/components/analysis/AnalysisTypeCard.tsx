@@ -5,6 +5,7 @@ import { User, Users, FileText, BarChart2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
 import type { AnalysisType } from '@/types';
+import { memo } from 'react';
 
 interface AnalysisTypeConfig {
   type: AnalysisType;
@@ -60,78 +61,75 @@ const analysisTypes: AnalysisTypeConfig[] = [
   },
 ];
 
+// Individual card — memoized so it only re-renders when its own props change
+const TypeCard = memo(function TypeCard({
+  config,
+  isSelected,
+  onSelect,
+}: {
+  config: AnalysisTypeConfig;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = config.icon;
+  return (
+    <motion.button
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onSelect}
+      className={cn(
+        'relative flex flex-col gap-3 p-4 rounded-xl border text-left transition-colors duration-150',
+        isSelected
+          ? cn('border-2', config.border, 'bg-gradient-to-br', config.gradient)
+          : 'border-border bg-card hover:border-border/80 hover:bg-accent/30'
+      )}
+    >
+      {isSelected && (
+        <motion.div
+          layoutId="selectedCard"
+          className={cn('absolute inset-0 rounded-xl bg-gradient-to-br opacity-50', config.gradient)}
+          transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+        />
+      )}
+
+      <div className="relative flex items-start gap-3">
+        <div className={cn('flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center', config.iconBg)}>
+          <Icon className={cn('w-4 h-4', config.iconColor)} />
+        </div>
+        {isSelected && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center"
+          >
+            <div className="w-2 h-2 bg-white rounded-full" />
+          </motion.div>
+        )}
+      </div>
+
+      <div className="relative">
+        <h3 className="text-sm font-semibold mb-1 text-foreground">{config.label}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{config.description}</p>
+      </div>
+    </motion.button>
+  );
+});
+
 export function AnalysisTypeCard() {
-  const { analysisType, setAnalysisType } = useAppStore();
+  // Only re-renders when analysisType changes — not on every store update
+  const analysisType = useAppStore((s) => s.analysisType);
+  const setAnalysisType = useAppStore((s) => s.setAnalysisType);
 
   return (
     <div className="grid grid-cols-2 gap-3">
-      {analysisTypes.map((config, index) => {
-        const Icon = config.icon;
-        const isSelected = analysisType === config.type;
-
-        return (
-          <motion.button
-            key={config.type}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05, duration: 0.3 }}
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setAnalysisType(config.type)}
-            className={cn(
-              'relative flex flex-col gap-3 p-4 rounded-xl border text-left transition-all duration-200',
-              isSelected
-                ? cn('border-2', config.border, `bg-gradient-to-br`, config.gradient)
-                : 'border-border bg-card hover:border-border/80 hover:bg-accent/30'
-            )}
-          >
-            {isSelected && (
-              <motion.div
-                layoutId="selectedCard"
-                className={cn(
-                  'absolute inset-0 rounded-xl bg-gradient-to-br opacity-50',
-                  config.gradient
-                )}
-                transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
-              />
-            )}
-
-            <div className="relative flex items-start gap-3">
-              <div
-                className={cn(
-                  'flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center',
-                  config.iconBg
-                )}
-              >
-                <Icon className={cn('w-4 h-4', config.iconColor)} />
-              </div>
-              {isSelected && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center"
-                >
-                  <div className="w-2 h-2 bg-white rounded-full" />
-                </motion.div>
-              )}
-            </div>
-
-            <div className="relative">
-              <h3
-                className={cn(
-                  'text-sm font-semibold mb-1',
-                  isSelected ? 'text-foreground' : 'text-foreground'
-                )}
-              >
-                {config.label}
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {config.description}
-              </p>
-            </div>
-          </motion.button>
-        );
-      })}
+      {analysisTypes.map((config) => (
+        <TypeCard
+          key={config.type}
+          config={config}
+          isSelected={analysisType === config.type}
+          onSelect={() => setAnalysisType(config.type)}
+        />
+      ))}
     </div>
   );
 }

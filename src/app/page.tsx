@@ -15,19 +15,20 @@ import { generateHistoryTitle } from '@/lib/historyUtils';
 import { Separator } from '@/components/ui/separator';
 
 function AnalysisView() {
-  const {
-    transcript,
-    analysisType,
-    result,
-    settings,
-    isStreaming,
-    setResult,
-    appendToResult,
-    setLoading,
-    setStreaming,
-    setError,
-    addToHistory,
-  } = useAppStore();
+  // Individual selectors — this component only re-renders when one of these changes
+  const transcript   = useAppStore((s) => s.transcript);
+  const analysisType = useAppStore((s) => s.analysisType);
+  const result       = useAppStore((s) => s.result);
+  const isLoading    = useAppStore((s) => s.isLoading);
+  const settings     = useAppStore((s) => s.settings);
+  const setResult     = useAppStore((s) => s.setResult);
+  const appendToResult = useAppStore((s) => s.appendToResult);
+  const setLoading    = useAppStore((s) => s.setLoading);
+  const setStreaming   = useAppStore((s) => s.setStreaming);
+  const setError      = useAppStore((s) => s.setError);
+  const addToHistory  = useAppStore((s) => s.addToHistory);
+
+  const showResult = result.length > 0 || isLoading;
 
   const handleAnalyze = async () => {
     if (!transcript.trim()) return;
@@ -54,9 +55,7 @@ function AnalysisView() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: 'Analysis failed',
-        }));
+        const errorData = await response.json().catch(() => ({ error: 'Analysis failed' }));
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
@@ -74,22 +73,18 @@ function AnalysisView() {
         appendToResult(chunk);
       }
 
-      // Save to history
       if (fullResult.trim()) {
-        const historyEntry = {
+        addToHistory({
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           title: generateHistoryTitle(analysisType, transcript),
           timestamp: Date.now(),
           analysisType,
           transcript,
           result: fullResult,
-        };
-        addToHistory(historyEntry);
+        });
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'An unexpected error occurred';
-      setError(message);
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setLoading(false);
       setStreaming(false);
@@ -98,10 +93,8 @@ function AnalysisView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
-          {/* Analysis Type Selection */}
           <section>
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
               Analysis Type
@@ -111,42 +104,34 @@ function AnalysisView() {
 
           <Separator />
 
-          {/* File Upload */}
           <section>
             <FileUpload />
           </section>
 
           <Separator />
 
-          {/* Transcript Input */}
           <section>
             <TranscriptInput />
           </section>
 
-          {/* Result */}
-          <AnimatePresence>
-            {(result || useAppStore.getState().isLoading) && (
-              <motion.section
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-              >
-                <Separator className="mb-6" />
-                <AnalysisResult />
-              </motion.section>
-            )}
-          </AnimatePresence>
+          {/* Result — rendered conditionally without AnimatePresence to avoid remount blink */}
+          {showResult && (
+            <section>
+              <Separator className="mb-6" />
+              <AnalysisResult />
+            </section>
+          )}
         </div>
       </div>
 
-      {/* Action Bar - sticky at bottom */}
       <ActionBar onAnalyze={handleAnalyze} />
     </div>
   );
 }
 
 export default function Home() {
-  const { activeView } = useAppStore();
+  // Only subscribes to activeView — won't re-render on transcript/result changes
+  const activeView = useAppStore((s) => s.activeView);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -169,7 +154,6 @@ export default function Home() {
                 <AnalysisView />
               </motion.div>
             )}
-
             {activeView === 'history' && (
               <motion.div
                 key="history"
@@ -184,7 +168,6 @@ export default function Home() {
                 </div>
               </motion.div>
             )}
-
             {activeView === 'settings' && (
               <motion.div
                 key="settings"

@@ -6,7 +6,9 @@ import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
 
 export function TranscriptInput() {
-  const { transcript, setTranscript, analysisType } = useAppStore();
+  const transcript = useAppStore((s) => s.transcript);
+  const setTranscript = useAppStore((s) => s.setTranscript);
+  const analysisType = useAppStore((s) => s.analysisType);
 
   const wordCount = transcript.trim()
     ? transcript.trim().split(/\s+/).length

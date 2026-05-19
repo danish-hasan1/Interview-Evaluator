@@ -37,7 +37,10 @@ function SkeletonLoader() {
 }
 
 export function AnalysisResult() {
-  const { result, isLoading, isStreaming, error } = useAppStore();
+  const result = useAppStore((s) => s.result);
+  const isLoading = useAppStore((s) => s.isLoading);
+  const isStreaming = useAppStore((s) => s.isStreaming);
+  const error = useAppStore((s) => s.error);
   const hasContent = result.trim().length > 0;
 
   if (!hasContent && !isLoading && !isStreaming && !error) {

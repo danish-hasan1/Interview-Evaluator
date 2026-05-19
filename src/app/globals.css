@@ -3,49 +3,56 @@
 @tailwind utilities;
 
 @layer base {
+  /* ─── Light mode: warm cream + professional teal ─── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 263 70% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 263 70% 50%;
-    --radius: 0.75rem;
+    --background:         40 30% 97%;    /* #F9F7F2 — warm cream */
+    --foreground:         20 15% 12%;    /* #1E1917 — rich charcoal */
+    --card:               0  0%  100%;   /* pure white cards */
+    --card-foreground:    20 15% 12%;
+    --popover:            0  0%  100%;
+    --popover-foreground: 20 15% 12%;
+    --primary:            172 75% 28%;   /* #0D7A70 — deep teal */
+    --primary-foreground: 0  0%  100%;
+    --secondary:          40 20% 92%;    /* warm cream secondary */
+    --secondary-foreground: 20 15% 20%;
+    --muted:              40 18% 93%;    /* light cream muted area */
+    --muted-foreground:   20  8% 44%;    /* warm mid-grey text */
+    --accent:             40 20% 90%;    /* slightly deeper cream */
+    --accent-foreground:  20 15% 12%;
+    --destructive:        0  84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border:             40 15% 86%;    /* warm subtle border */
+    --input:              40 15% 86%;
+    --ring:               172 75% 28%;
+    --radius:             0.75rem;
+
+    /* highlight amber for badges/callouts */
+    --highlight: 38 92% 50%;
   }
 
+  /* ─── Dark mode: deep slate + warm teal ─── */
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-    --card: 224 71% 8%;
-    --card-foreground: 213 31% 91%;
-    --popover: 224 71% 6%;
-    --popover-foreground: 213 31% 91%;
-    --primary: 263 70% 65%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 223 47% 14%;
-    --secondary-foreground: 213 31% 91%;
-    --muted: 223 47% 11%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 216 34% 17%;
-    --accent-foreground: 213 31% 91%;
-    --destructive: 0 63% 55%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-    --ring: 263 70% 65%;
+    --background:         222 22%  8%;   /* #0E1219 — deep cool slate */
+    --foreground:          40 12% 90%;   /* #E8E4DC — warm off-white */
+    --card:               222 18% 12%;   /* #171C26 — slightly lighter slate */
+    --card-foreground:     40 12% 90%;
+    --popover:            222 22% 10%;
+    --popover-foreground:  40 12% 90%;
+    --primary:            172 55% 50%;   /* #34B5A5 — medium teal */
+    --primary-foreground:  0  0%  100%;
+    --secondary:          222 15% 16%;
+    --secondary-foreground: 40 12% 85%;
+    --muted:              222 15% 14%;
+    --muted-foreground:    40  8% 52%;
+    --accent:             222 15% 17%;
+    --accent-foreground:   40 12% 90%;
+    --destructive:         0  63% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border:             222 14% 19%;
+    --input:              222 14% 19%;
+    --ring:               172 55% 50%;
+
+    --highlight: 38 80% 55%;
   }
 }
 
@@ -55,107 +62,68 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: hsl(var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
-}
-
-/* Prose styles for markdown rendering */
+/* ─── Prose / Markdown ─── */
 .prose-interview {
   @apply text-foreground leading-relaxed;
 }
-
 .prose-interview h1 {
-  @apply text-2xl font-bold text-foreground mt-6 mb-3 pb-2 border-b border-border;
+  @apply text-xl font-bold text-foreground mt-6 mb-3 pb-2 border-b border-border;
 }
-
 .prose-interview h2 {
-  @apply text-xl font-semibold text-foreground mt-5 mb-2;
+  @apply text-lg font-semibold text-foreground mt-5 mb-2;
 }
-
 .prose-interview h3 {
-  @apply text-lg font-medium text-foreground mt-4 mb-2;
+  @apply text-base font-semibold text-foreground mt-4 mb-2;
 }
-
-.prose-interview p {
-  @apply mb-3 text-sm leading-7;
-}
-
-.prose-interview ul {
-  @apply mb-3 pl-5 space-y-1;
-}
-
-.prose-interview li {
-  @apply text-sm leading-6 list-disc;
-}
-
-.prose-interview strong {
-  @apply font-semibold text-foreground;
-}
-
-.prose-interview em {
-  @apply italic text-muted-foreground;
-}
-
+.prose-interview p   { @apply mb-3 text-sm leading-7; }
+.prose-interview ul  { @apply mb-3 pl-5 space-y-1; }
+.prose-interview ol  { @apply mb-3 pl-5 space-y-1 list-decimal; }
+.prose-interview li  { @apply text-sm leading-6 list-disc; }
+.prose-interview strong { @apply font-semibold text-foreground; }
+.prose-interview em  { @apply italic text-muted-foreground; }
 .prose-interview code {
   @apply bg-muted px-1.5 py-0.5 rounded text-xs font-mono;
 }
-
 .prose-interview pre {
-  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-3;
+  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-3 text-xs;
 }
-
 .prose-interview blockquote {
   @apply border-l-4 border-primary pl-4 italic text-muted-foreground my-3;
 }
-
-.prose-interview table {
-  @apply w-full border-collapse mb-3;
-}
-
+.prose-interview table  { @apply w-full border-collapse mb-4 text-sm; }
 .prose-interview th {
-  @apply border border-border px-3 py-2 bg-muted font-semibold text-left text-sm;
+  @apply border border-border px-3 py-2 bg-muted font-semibold text-left text-xs uppercase tracking-wide;
 }
+.prose-interview td { @apply border border-border px-3 py-2 text-sm; }
+.prose-interview tr:nth-child(even) td { @apply bg-muted/40; }
 
-.prose-interview td {
-  @apply border border-border px-3 py-2 text-sm;
-}
-
-/* Gradient text utility */
+/* ─── Gradient text utility ─── */
 .gradient-text {
-  background: linear-gradient(135deg, hsl(var(--primary)), #06b6d4);
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(172 70% 42%));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Glow effects */
+/* ─── Subtle glow on primary elements ─── */
 .glow-primary {
-  box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+  box-shadow: 0 0 18px hsl(var(--primary) / 0.25);
 }
-
 .glow-primary:hover {
-  box-shadow: 0 0 40px hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 32px hsl(var(--primary) / 0.40);
 }
 
-/* Shimmer animation for skeleton */
+/* ─── Skeleton shimmer ─── */
 .shimmer {
   background: linear-gradient(
     90deg,
@@ -164,22 +132,29 @@
     hsl(var(--muted)) 75%
   );
   background-size: 200% 100%;
-  animation: shimmer 2s linear infinite;
+  animation: shimmer 1.8s linear infinite;
 }
-
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 
-/* Streaming cursor */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
+/* ─── Streaming cursor ─── */
 .streaming-cursor::after {
-  content: '▊';
+  content: '▌';
   animation: blink 1s ease-in-out infinite;
   color: hsl(var(--primary));
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ─── Animate pulse glow for active analyze button ─── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 12px hsl(var(--primary) / 0.3); }
+  50%       { box-shadow: 0 0 28px hsl(var(--primary) / 0.6); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 1.6s ease-in-out infinite;
 }

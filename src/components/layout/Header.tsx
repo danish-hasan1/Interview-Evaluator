@@ -39,12 +39,13 @@ const analysisTypeConfig: Record<AnalysisType, { title: string; description: str
   interviewerAudit: {
     title: 'Interviewer Audit',
     description: 'Comprehensive multi-transcript audit of an interviewer\'s patterns and consistency',
-    color: 'purple',
+    color: 'teal',
   },
 };
 
 export function Header() {
-  const { activeView, analysisType } = useAppStore();
+  const activeView = useAppStore((s) => s.activeView);
+  const analysisType = useAppStore((s) => s.analysisType);
 
   const config =
     activeView === 'analysis'
@@ -75,7 +76,7 @@ export function Header() {
           {activeView === 'analysis' && (
             <Badge
               variant={
-                (analysisTypeConfig[analysisType].color as 'info' | 'success' | 'warning' | 'purple') ||
+                (analysisTypeConfig[analysisType].color as 'info' | 'success' | 'warning' | 'teal') ||
                 'default'
               }
               className="text-xs"

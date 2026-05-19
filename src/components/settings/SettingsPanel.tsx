@@ -25,7 +25,8 @@ const MODELS = [
 ];
 
 export function SettingsPanel() {
-  const { settings, updateSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
   const [showApiKey, setShowApiKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [localSettings, setLocalSettings] = useState({ ...settings });
@@ -124,8 +125,8 @@ export function SettingsPanel() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
-              <Sliders className="w-5 h-5 text-violet-400" />
+            <div className="w-9 h-9 rounded-xl bg-teal-500/15 flex items-center justify-center">
+              <Sliders className="w-5 h-5 text-teal-600 dark:text-teal-400" />
             </div>
             <div>
               <CardTitle className="text-base">Model Parameters</CardTitle>

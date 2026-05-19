@@ -39,7 +39,9 @@ function mergeTranscripts(texts: string[]): string {
 }
 
 export function FileUpload() {
-  const { transcript, setTranscript, analysisType } = useAppStore();
+  const transcript = useAppStore((s) => s.transcript);
+  const setTranscript = useAppStore((s) => s.setTranscript);
+  const analysisType = useAppStore((s) => s.analysisType);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 

@@ -8,11 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { AnalysisHistory, AnalysisType } from '@/types';
 
-const typeConfig: Record<AnalysisType, { icon: React.ElementType; label: string; color: 'info' | 'success' | 'warning' | 'purple' }> = {
+const typeConfig: Record<AnalysisType, { icon: React.ElementType; label: string; color: 'info' | 'success' | 'warning' | 'teal' }> = {
   candidate: { icon: User, label: 'Candidate', color: 'info' },
   interviewer: { icon: Users, label: 'Interviewer', color: 'success' },
   taSummary: { icon: FileText, label: 'TA Summary', color: 'warning' },
-  interviewerAudit: { icon: BarChart2, label: 'Audit', color: 'purple' },
+  interviewerAudit: { icon: BarChart2, label: 'Audit', color: 'teal' },
 };
 
 function HistoryCard({
@@ -94,8 +94,10 @@ function HistoryCard({
 }
 
 export function HistoryPanel() {
-  const { history, deleteHistoryEntry, clearHistory, restoreFromHistory } =
-    useAppStore();
+  const history            = useAppStore((s) => s.history);
+  const deleteHistoryEntry = useAppStore((s) => s.deleteHistoryEntry);
+  const clearHistory       = useAppStore((s) => s.clearHistory);
+  const restoreFromHistory = useAppStore((s) => s.restoreFromHistory);
 
   return (
     <motion.div

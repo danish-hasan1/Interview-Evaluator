@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   title: 'Interview Intelligence — AI-Powered Evaluation Platform',
   description:
     'Analyze interview transcripts with AI. Get deep insights on candidate performance, interviewer quality, and hiring recommendations.',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -21,7 +25,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
