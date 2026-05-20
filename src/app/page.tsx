@@ -47,10 +47,11 @@ function AnalysisView() {
           transcript,
           analysisType,
           settings: {
-            groqApiKey: settings.groqApiKey,
-            model: settings.model,
-            temperature: settings.temperature,
-            maxTokens: settings.maxTokens,
+            groqApiKey:   settings.groqApiKey,
+            geminiApiKey: settings.geminiApiKey,
+            model:        settings.model,
+            temperature:  settings.temperature,
+            maxTokens:    settings.maxTokens,
           },
         }),
       });

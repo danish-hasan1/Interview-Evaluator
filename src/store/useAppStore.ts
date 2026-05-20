@@ -110,6 +110,16 @@ export const useAppStore = create<AppState>()(
         history: state.history,
         settings: state.settings,
       }),
+      // Merge defaults so new fields (e.g. geminiApiKey) appear for
+      // existing users whose localStorage predates the field.
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as object),
+        settings: {
+          ...current.settings,
+          ...((persisted as { settings?: object }).settings ?? {}),
+        },
+      }),
     }
   )
 );
