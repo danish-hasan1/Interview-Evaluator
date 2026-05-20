@@ -19,17 +19,17 @@ const MODEL_GROUPS = [
   {
     label: '✦ Google Gemini  —  Recommended (1M token free tier)',
     models: [
-      { value: 'gemini-2.0-flash',   label: 'Gemini 2.0 Flash',    badge: 'Fastest',   badgeVariant: 'success' as const },
-      { value: 'gemini-1.5-flash',   label: 'Gemini 1.5 Flash',    badge: 'Recommended', badgeVariant: 'info' as const },
-      { value: 'gemini-1.5-pro',     label: 'Gemini 1.5 Pro',      badge: 'Most capable', badgeVariant: 'teal' as const },
+      { value: 'gemini-2.0-flash',        label: 'Gemini 2.0 Flash',        badge: 'Recommended', badgeVariant: 'success' as const },
+      { value: 'gemini-1.5-flash',        label: 'Gemini 1.5 Flash',        badge: 'Stable',      badgeVariant: 'info'    as const },
+      { value: 'gemini-1.5-flash-8b',     label: 'Gemini 1.5 Flash 8B',     badge: 'Fastest',     badgeVariant: 'teal'    as const },
     ],
   },
   {
     label: '⚡ Groq  —  Fast (12K token/min free tier)',
     models: [
-      { value: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B Instant',    badge: '30K TPM',   badgeVariant: 'success' as const },
-      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', badge: '12K TPM',   badgeVariant: 'warning' as const },
-      { value: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B',            badge: '5K TPM',    badgeVariant: 'warning' as const },
+      { value: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B Instant',    badge: '30K TPM',  badgeVariant: 'success' as const },
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', badge: '12K TPM',  badgeVariant: 'warning' as const },
+      { value: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B',            badge: '5K TPM',   badgeVariant: 'warning' as const },
     ],
   },
 ];
