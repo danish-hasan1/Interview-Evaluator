@@ -11,6 +11,7 @@ export interface AnalysisHistory {
 
 export interface AppSettings {
   groqApiKey: string;
+  geminiApiKey: string;
   model: string;
   temperature: number;
   maxTokens: number;

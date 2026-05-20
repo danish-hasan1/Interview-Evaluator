@@ -39,7 +39,8 @@ interface AppState {
 
 const defaultSettings: AppSettings = {
   groqApiKey: '',
-  model: 'llama-3.3-70b-versatile',
+  geminiApiKey: '',
+  model: 'gemini-1.5-flash',
   temperature: 0.3,
   maxTokens: 32768,
   theme: 'dark',
