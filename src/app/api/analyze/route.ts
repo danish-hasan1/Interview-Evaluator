@@ -9,12 +9,37 @@ import type { AnalysisType, AppSettings } from '@/types';
 
 export const maxDuration = 60;
 
-// Groq free tier: ~12 000 TPM — truncate transcripts that would exceed it.
-// Gemini free tier: 1 000 000 TPM — no practical limit, skip truncation.
 const GROQ_MAX_TRANSCRIPT_CHARS = 40_000;
 
 function isGeminiModel(model: string) {
   return model.startsWith('gemini');
+}
+
+function isRateLimitError(err: unknown) {
+  return err instanceof Error && (
+    err.message.includes('429') ||
+    err.message.includes('RESOURCE_EXHAUSTED') ||
+    err.message.includes('Too Many Requests')
+  );
+}
+
+// Auto-retry for transient 429s (Gemini free tier: 15 RPM)
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delayMs = 5000
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isRateLimitError(err) || attempt === retries - 1) throw err;
+      await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 function truncateForGroq(text: string): { text: string; truncated: boolean } {
@@ -37,14 +62,18 @@ function buildAnalysisPrompt(analysisType: AnalysisType, transcript: string): st
 function friendlyError(error: unknown): string {
   if (!(error instanceof Error)) return 'An unexpected error occurred. Please try again.';
   const msg = error.message;
+
   if (msg.includes('rate_limit_exceeded') || msg.includes('Request too large') || msg.includes('tokens per minute')) {
-    return 'Transcript is too long for your current plan\'s token limit. Switch to a Gemini model in Settings (it has a 1M token free tier), or split the transcript into smaller parts.';
+    return 'Transcript is too long for your plan\'s token limit. Switch to a Gemini model in Settings — it supports 1M tokens for free.';
+  }
+  if (isRateLimitError(error)) {
+    return 'Gemini free tier limit reached (15 requests/min). The app retried automatically — if this keeps happening, wait 60 seconds and try again, or switch to a Groq model in Settings.';
   }
   if (msg.includes('401') || msg.includes('invalid_api_key') || msg.includes('API_KEY_INVALID') || msg.includes('Authentication')) {
     return 'Invalid API key. Please check your key in Settings.';
   }
-  if (msg.includes('429')) {
-    return 'Rate limit reached. Please wait a moment and try again.';
+  if (msg.includes('404') || msg.includes('not found')) {
+    return `Model not found: "${msg.match(/models\/([^\s]+)/)?.[1] ?? 'unknown'}". Please select a different model in Settings.`;
   }
   try { return JSON.parse(msg)?.error?.message ?? msg; } catch { return msg; }
 }
@@ -68,7 +97,6 @@ export async function POST(request: NextRequest) {
     const temperature = settings?.temperature ?? 0.3;
     const useGemini   = isGeminiModel(model);
 
-    // Resolve API key — check settings first, then env vars
     const apiKey = useGemini
       ? (settings?.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '')
       : (settings?.groqApiKey   || process.env.GROQ_API_KEY || '');
@@ -82,7 +110,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Groq: truncate long transcripts to stay within TPM limits
     let safeTranscript = transcript;
     let truncated = false;
     if (!useGemini) {
@@ -93,15 +120,15 @@ export async function POST(request: NextRequest) {
 
     const prompt = buildAnalysisPrompt(analysisType, safeTranscript);
     const truncationNotice = truncated
-      ? `> ⚠️ **Note:** Transcript was trimmed to ~40 000 characters to fit Groq's free tier token limit. Switch to a Gemini model in Settings for unlimited transcript length.\n\n`
+      ? `> ⚠️ **Note:** Transcript trimmed to ~40 000 chars for Groq's token limit. Use a Gemini model for full-length transcripts.\n\n`
       : '';
 
     const encoder = new TextEncoder();
 
-    // ── Gemini streaming ──────────────────────────────────────────────
+    // ── Gemini ────────────────────────────────────────────────────────
     if (useGemini) {
-      const genAI     = new GoogleGenerativeAI(apiKey);
-      const gemini    = genAI.getGenerativeModel({
+      const genAI  = new GoogleGenerativeAI(apiKey);
+      const gemini = genAI.getGenerativeModel({
         model,
         generationConfig: { temperature, maxOutputTokens: 8192 },
       });
@@ -109,7 +136,8 @@ export async function POST(request: NextRequest) {
       const readable = new ReadableStream({
         async start(controller) {
           try {
-            const result = await gemini.generateContentStream(prompt);
+            // Retry up to 3 times with 5s / 10s / 15s backoff for rate limits
+            const result = await withRetry(() => gemini.generateContentStream(prompt));
             for await (const chunk of result.stream) {
               const text = chunk.text();
               if (text) controller.enqueue(encoder.encode(text));
@@ -127,14 +155,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── Groq streaming ────────────────────────────────────────────────
+    // ── Groq ──────────────────────────────────────────────────────────
     const groq   = new Groq({ apiKey });
-    const stream = await groq.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      stream: true,
-      temperature,
-    });
+    const stream = await withRetry(() =>
+      groq.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: true,
+        temperature,
+      })
+    );
 
     const readable = new ReadableStream({
       async start(controller) {
