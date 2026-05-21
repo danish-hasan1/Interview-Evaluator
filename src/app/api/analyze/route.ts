@@ -1,11 +1,8 @@
 import { NextRequest } from 'next/server';
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import OpenAI from 'openai';
-import { buildPrompt as buildCandidatePrompt } from '@/prompts/candidate';
-import { buildPrompt as buildInterviewerPrompt } from '@/prompts/interviewer';
-import { buildPrompt as buildTaSummaryPrompt } from '@/prompts/taSummary';
-import { buildPrompt as buildInterviewerAuditPrompt } from '@/prompts/interviewerAudit';
+import { buildExtractionPrompt } from '@/prompts/extract';
+import { buildEvaluationPrompt } from '@/prompts/evaluate';
 import type { AnalysisType, AppSettings } from '@/types';
 
 export const maxDuration = 60;
@@ -25,28 +22,25 @@ function compressTranscript(text: string): string {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const GROQ_MAX_CHARS       = 38_000;
-const OPENROUTER_MAX_CHARS = 60_000;
-const MISTRAL_MAX_CHARS    = 60_000;
+// Groq llama-3.1-8b-instant: 30K TPM. Extraction prompt ~150 tokens + transcript.
+// Keep transcript under 28K chars (~7K tokens) so there's headroom for the response.
+const GROQ_EXTRACT_MAX_CHARS = 28_000;
 
-function isGeminiModel(m: string)      { return m.startsWith('gemini'); }
-function isGroqModel(m: string)        { return !m.startsWith('gemini') && !m.startsWith('mistral') && !m.startsWith('open-mistral') && !m.includes('/'); }
-function isMistralModel(m: string)     { return m.startsWith('mistral') || m.startsWith('open-mistral') || m.startsWith('codestral'); }
-function isOpenRouterModel(m: string)  { return m.includes('/'); }
+function isGeminiModel(m: string) { return m.startsWith('gemini'); }
 
 function isRateLimitError(err: unknown) {
   if (!(err instanceof Error)) return false;
   const m = err.message;
-  return m.includes('429') || m.includes('RESOURCE_EXHAUSTED') || m.includes('Too Many Requests') || m.includes('rate_limit_exceeded') || m.includes('rate-limit');
+  return m.includes('429') || m.includes('RESOURCE_EXHAUSTED') || m.includes('Too Many Requests') || m.includes('rate_limit_exceeded');
 }
 
 function isTokenLimitError(err: unknown) {
   if (!(err instanceof Error)) return false;
   const m = err.message;
-  return m.includes('Request too large') || m.includes('tokens per minute') || m.includes('context_length_exceeded') || m.includes('string_above_max_length');
+  return m.includes('Request too large') || m.includes('tokens per minute') || m.includes('context_length_exceeded');
 }
 
-function truncateTo(text: string, maxChars: number): { text: string; truncated: boolean } {
+function truncate(text: string, maxChars: number): { text: string; truncated: boolean } {
   if (text.length <= maxChars) return { text, truncated: false };
   const cut = text.lastIndexOf('\n', maxChars);
   return { text: text.slice(0, cut > maxChars * 0.8 ? cut : maxChars), truncated: true };
@@ -54,30 +48,65 @@ function truncateTo(text: string, maxChars: number): { text: string; truncated: 
 
 async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-function buildPrompt(type: AnalysisType, transcript: string): string {
-  switch (type) {
-    case 'candidate':        return buildCandidatePrompt(transcript);
-    case 'interviewer':      return buildInterviewerPrompt(transcript);
-    case 'taSummary':        return buildTaSummaryPrompt(transcript);
-    case 'interviewerAudit': return buildInterviewerAuditPrompt(transcript);
-    default:                 return buildCandidatePrompt(transcript);
-  }
-}
-
 function friendlyError(err: unknown): string {
   if (!(err instanceof Error)) return 'An unexpected error occurred.';
   const m = err.message;
-  if (isRateLimitError(err))  return 'All providers hit their rate limits. Please wait 60 seconds and try again.';
-  if (isTokenLimitError(err)) return 'Transcript is still too long after compression. Please split it into two parts and run separate analyses.';
-  if (m.includes('401') || m.includes('API_KEY_INVALID') || m.includes('invalid_api_key') || m.includes('No auth'))
+  if (isRateLimitError(err))  return 'Rate limit hit on all providers. Please wait 60 seconds and try again.';
+  if (isTokenLimitError(err)) return 'Transcript is still too long after compression. Please split it into two parts.';
+  if (m.includes('401') || m.includes('API_KEY_INVALID') || m.includes('invalid_api_key'))
     return 'Invalid API key. Please check your key in Settings.';
   if (m.includes('404') || m.includes('not found'))
     return 'Model not found. Please select a different model in Settings.';
   try { return JSON.parse(m)?.error?.message ?? m; } catch { return m; }
 }
 
-// ── Gemini streaming ──────────────────────────────────────────────────────────
-async function streamGemini(
+// ── Phase 1: Extract facts (non-streaming, Groq) ──────────────────────────────
+async function extractWithGroq(
+  apiKey: string, transcript: string, type: AnalysisType, temperature: number
+): Promise<string> {
+  const groq   = new Groq({ apiKey });
+  const prompt = buildExtractionPrompt(type, transcript);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        temperature,
+        max_tokens: 1200,
+      });
+      return res.choices[0]?.message?.content ?? '';
+    } catch (err) {
+      if (isRateLimitError(err) && attempt === 0) { await sleep(5000); continue; }
+      throw err;
+    }
+  }
+  return '';
+}
+
+// ── Phase 1: Extract facts (non-streaming, Gemini fallback) ──────────────────
+async function extractWithGemini(
+  apiKey: string, model: string, transcript: string, type: AnalysisType, temperature: number
+): Promise<string> {
+  const genAI  = new GoogleGenerativeAI(apiKey);
+  const gemini = genAI.getGenerativeModel({ model, generationConfig: { temperature, maxOutputTokens: 1200 } });
+  const prompt = buildExtractionPrompt(type, transcript);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await gemini.generateContent(prompt);
+      return result.response.text();
+    } catch (err) {
+      if (isRateLimitError(err) && attempt === 0) { await sleep(5000); continue; }
+      throw err;
+    }
+  }
+  return '';
+}
+
+// ── Phase 2: Evaluate from facts (streaming, Gemini) ─────────────────────────
+async function streamEvalGemini(
   apiKey: string, model: string, prompt: string, temperature: number,
   encoder: TextEncoder, controller: ReadableStreamDefaultController
 ): Promise<boolean> {
@@ -93,21 +122,19 @@ async function streamGemini(
       }
       return true;
     } catch (err) {
-      if ((isRateLimitError(err) || isTokenLimitError(err)) && attempt === 0) { await sleep(5000); continue; }
-      if (isRateLimitError(err) || isTokenLimitError(err)) return false;
+      if (isRateLimitError(err) && attempt === 0) { await sleep(5000); continue; }
+      if (isRateLimitError(err)) return false;
       throw err;
     }
   }
   return false;
 }
 
-// ── Groq streaming ────────────────────────────────────────────────────────────
-async function streamGroq(
+// ── Phase 2: Evaluate from facts (streaming, Groq) ───────────────────────────
+async function streamEvalGroq(
   apiKey: string, model: string, prompt: string, temperature: number,
-  encoder: TextEncoder, controller: ReadableStreamDefaultController,
-  prefixNote = ''
-): Promise<boolean> {
-  if (prefixNote) controller.enqueue(encoder.encode(prefixNote));
+  encoder: TextEncoder, controller: ReadableStreamDefaultController
+): Promise<void> {
   const groq = new Groq({ apiKey });
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -119,77 +146,12 @@ async function streamGroq(
         const text = chunk.choices[0]?.delta?.content || '';
         if (text) controller.enqueue(encoder.encode(text));
       }
-      return true;
+      return;
     } catch (err) {
-      if ((isRateLimitError(err) || isTokenLimitError(err)) && attempt === 0) { await sleep(5000); continue; }
-      if (isRateLimitError(err) || isTokenLimitError(err)) return false;
+      if (isRateLimitError(err) && attempt === 0) { await sleep(5000); continue; }
       throw err;
     }
   }
-  return false;
-}
-
-// ── OpenRouter streaming (OpenAI-compatible) ──────────────────────────────────
-async function streamOpenRouter(
-  apiKey: string, model: string, prompt: string, temperature: number,
-  encoder: TextEncoder, controller: ReadableStreamDefaultController,
-  prefixNote = ''
-): Promise<boolean> {
-  if (prefixNote) controller.enqueue(encoder.encode(prefixNote));
-  const client = new OpenAI({
-    apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: {
-      'HTTP-Referer': 'https://interview-evaluator.vercel.app',
-      'X-Title': 'Interview Intelligence',
-    },
-  });
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const stream = await client.chat.completions.create({
-        model, messages: [{ role: 'user', content: prompt }], stream: true, temperature, max_tokens: 4096,
-      });
-      for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content || '';
-        if (text) controller.enqueue(encoder.encode(text));
-      }
-      return true;
-    } catch (err) {
-      if ((isRateLimitError(err) || isTokenLimitError(err)) && attempt === 0) { await sleep(5000); continue; }
-      if (isRateLimitError(err) || isTokenLimitError(err)) return false;
-      throw err;
-    }
-  }
-  return false;
-}
-
-// ── Mistral streaming (OpenAI-compatible) ─────────────────────────────────────
-async function streamMistral(
-  apiKey: string, model: string, prompt: string, temperature: number,
-  encoder: TextEncoder, controller: ReadableStreamDefaultController,
-  prefixNote = ''
-): Promise<boolean> {
-  if (prefixNote) controller.enqueue(encoder.encode(prefixNote));
-  const client = new OpenAI({ apiKey, baseURL: 'https://api.mistral.ai/v1' });
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const stream = await client.chat.completions.create({
-        model, messages: [{ role: 'user', content: prompt }], stream: true, temperature, max_tokens: 4096,
-      });
-      for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content || '';
-        if (text) controller.enqueue(encoder.encode(text));
-      }
-      return true;
-    } catch (err) {
-      if ((isRateLimitError(err) || isTokenLimitError(err)) && attempt === 0) { await sleep(5000); continue; }
-      if (isRateLimitError(err) || isTokenLimitError(err)) return false;
-      throw err;
-    }
-  }
-  return false;
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -205,96 +167,81 @@ export async function POST(request: NextRequest) {
         { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const selectedModel  = settings?.model || 'gemini-1.5-flash';
-    const temperature    = settings?.temperature ?? 0.3;
-    const geminiKey      = settings?.geminiApiKey     || process.env.GEMINI_API_KEY     || process.env.GOOGLE_API_KEY || '';
-    const groqKey        = settings?.groqApiKey       || process.env.GROQ_API_KEY       || '';
-    const openrouterKey  = settings?.openrouterApiKey || process.env.OPENROUTER_API_KEY || '';
-    const mistralKey     = settings?.mistralApiKey    || process.env.MISTRAL_API_KEY    || '';
+    const selectedModel = settings?.model || 'gemini-1.5-flash';
+    const temperature   = settings?.temperature ?? 0.3;
+    const geminiKey     = settings?.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+    const groqKey       = settings?.groqApiKey   || process.env.GROQ_API_KEY   || '';
 
-    const primaryIsGemini     = isGeminiModel(selectedModel);
-    const primaryIsGroq       = isGroqModel(selectedModel);
-    const primaryIsMistral    = isMistralModel(selectedModel);
-    const primaryIsOpenRouter = isOpenRouterModel(selectedModel);
-
-    const anyKey = geminiKey || groqKey || openrouterKey || mistralKey;
-    if (!anyKey) {
-      return new Response(JSON.stringify({ error: 'No API key configured. Add at least one key in Settings.' }),
+    if (!geminiKey && !groqKey) {
+      return new Response(JSON.stringify({ error: 'No API key configured. Add a Gemini or Groq key in Settings.' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Compress + per-provider truncation
-    const compressed  = compressTranscript(transcript);
-    const savedChars  = transcript.length - compressed.length;
-    const compressionNote = savedChars > 500
-      ? `> ℹ️ Transcript compressed: removed ${savedChars.toLocaleString()} chars of timestamps & filler words.\n\n`
-      : '';
+    // Compress + truncate for Phase 1 (Groq extraction)
+    const compressed = compressTranscript(transcript);
+    const savedChars = transcript.length - compressed.length;
+    const { text: extractTranscript, truncated } = truncate(compressed, GROQ_EXTRACT_MAX_CHARS);
 
-    const { text: groqText,    truncated: groqTruncated }    = truncateTo(compressed, GROQ_MAX_CHARS);
-    const { text: orText,      truncated: orTruncated }      = truncateTo(compressed, OPENROUTER_MAX_CHARS);
-    const { text: mistralText, truncated: mistralTruncated } = truncateTo(compressed, MISTRAL_MAX_CHARS);
-
-    const groqPrompt    = buildPrompt(analysisType, groqText);
-    const orPrompt      = buildPrompt(analysisType, orText);
-    const mistralPrompt = buildPrompt(analysisType, mistralText);
-    const geminiPrompt  = buildPrompt(analysisType, compressed);
-
-    const encoder = new TextEncoder();
-
+    const encoder  = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         const enc = (text: string) => controller.enqueue(encoder.encode(text));
+
         try {
-          if (compressionNote) enc(compressionNote);
-
-          // ── Primary provider ────────────────────────────────────────────
-          let ok = false;
-
-          if (primaryIsGemini && geminiKey) {
-            ok = await streamGemini(geminiKey, selectedModel, geminiPrompt, temperature, encoder, controller);
-          } else if (primaryIsGroq && groqKey) {
-            if (groqTruncated) enc(`> ⚠️ Transcript trimmed to ~38 000 chars for Groq.\n\n`);
-            ok = await streamGroq(groqKey, selectedModel, groqPrompt, temperature, encoder, controller);
-          } else if (primaryIsOpenRouter && openrouterKey) {
-            if (orTruncated) enc(`> ⚠️ Transcript trimmed to ~60 000 chars for OpenRouter.\n\n`);
-            ok = await streamOpenRouter(openrouterKey, selectedModel, orPrompt, temperature, encoder, controller);
-          } else if (primaryIsMistral && mistralKey) {
-            if (mistralTruncated) enc(`> ⚠️ Transcript trimmed to ~60 000 chars for Mistral.\n\n`);
-            ok = await streamMistral(mistralKey, selectedModel, mistralPrompt, temperature, encoder, controller);
+          // ── Header notes ──────────────────────────────────────────────────
+          if (savedChars > 500) {
+            enc(`> ℹ️ Transcript compressed — removed ${savedChars.toLocaleString()} chars of timestamps & filler words.\n\n`);
+          }
+          if (truncated) {
+            enc(`> ⚠️ Transcript trimmed to 28 000 chars for extraction (Groq token limit).\n\n`);
           }
 
-          if (ok) { controller.close(); return; }
+          // ── Phase 1: Extract structured facts from transcript ─────────────
+          // Groq reads the heavy transcript; Gemini only sees the tiny output.
+          enc(`> 🔍 **Phase 1 of 2** — Reading transcript & extracting key data...\n\n`);
 
-          // ── Waterfall fallbacks ─────────────────────────────────────────
-          type Fallback = { name: string; fn: () => Promise<boolean> };
-          const fallbacks: Fallback[] = [];
+          let extractedFacts = '';
 
-          if (!primaryIsGroq && groqKey)
-            fallbacks.push({ name: 'Groq (llama-3.1-8b-instant)',
-              fn: () => streamGroq(groqKey, 'llama-3.1-8b-instant', groqPrompt, temperature, encoder, controller,
-                groqTruncated ? `> ⚠️ Transcript trimmed to ~38 000 chars for Groq.\n\n` : '') });
-
-          if (!primaryIsOpenRouter && openrouterKey)
-            fallbacks.push({ name: 'OpenRouter (llama-3.1-8b free)',
-              fn: () => streamOpenRouter(openrouterKey, 'meta-llama/llama-3.1-8b-instruct:free', orPrompt, temperature, encoder, controller,
-                orTruncated ? `> ⚠️ Transcript trimmed to ~60 000 chars for OpenRouter.\n\n` : '') });
-
-          if (!primaryIsMistral && mistralKey)
-            fallbacks.push({ name: 'Mistral (open-mistral-nemo)',
-              fn: () => streamMistral(mistralKey, 'open-mistral-nemo', mistralPrompt, temperature, encoder, controller,
-                mistralTruncated ? `> ⚠️ Transcript trimmed to ~60 000 chars for Mistral.\n\n` : '') });
-
-          if (!primaryIsGemini && geminiKey)
-            fallbacks.push({ name: 'Gemini (gemini-1.5-flash)',
-              fn: () => streamGemini(geminiKey, 'gemini-1.5-flash', geminiPrompt, temperature, encoder, controller) });
-
-          for (const { name, fn } of fallbacks) {
-            enc(`\n\n> ⚡ Switched to ${name} (previous provider rate-limited).\n\n`);
-            ok = await fn();
-            if (ok) { controller.close(); return; }
+          if (groqKey) {
+            extractedFacts = await extractWithGroq(groqKey, extractTranscript, analysisType, temperature);
+          } else {
+            // No Groq key — Gemini does extraction too (still saves tokens on eval pass)
+            const extractModel = isGeminiModel(selectedModel) ? selectedModel : 'gemini-1.5-flash';
+            extractedFacts = await extractWithGemini(geminiKey, extractModel, compressed, analysisType, temperature);
           }
 
-          enc(`\n\n> **Error:** All configured providers hit their rate limits. Please wait 60 seconds and try again, or add more API keys in Settings.`);
+          if (!extractedFacts.trim()) {
+            enc(`\n\n> **Error:** Extraction phase returned empty output. Please try again.`);
+            controller.close();
+            return;
+          }
+
+          // ── Phase 2: Evaluate from extracted facts ────────────────────────
+          // Extracted facts are ~500-800 tokens — fraction of the original transcript.
+          // Use the user's selected (higher-quality) model for the evaluation pass.
+          enc(`\n\n> 📊 **Phase 2 of 2** — Generating evaluation from extracted data...\n\n---\n\n`);
+
+          const evalPrompt       = buildEvaluationPrompt(analysisType, extractedFacts);
+          const useGeminiForEval = isGeminiModel(selectedModel) && !!geminiKey;
+
+          if (useGeminiForEval) {
+            const ok = await streamEvalGemini(geminiKey, selectedModel, evalPrompt, temperature, encoder, controller);
+            if (!ok) {
+              if (!groqKey) {
+                enc(`\n\n> **Error:** Gemini rate limited and no Groq key is configured as fallback. Wait 60 seconds or add a Groq key in Settings.`);
+                controller.close();
+                return;
+              }
+              // Gemini rate-limited → Groq handles eval easily (only ~1K tokens)
+              enc(`\n\n> ⚡ Gemini rate limited — switching to Groq for evaluation.\n\n`);
+              await streamEvalGroq(groqKey, 'llama-3.3-70b-versatile', evalPrompt, temperature, encoder, controller);
+            }
+          } else {
+            // Groq-only path: instant model extracted, versatile model evaluates
+            const evalModel = selectedModel.startsWith('gemini') ? 'llama-3.3-70b-versatile' : selectedModel;
+            await streamEvalGroq(groqKey, evalModel, evalPrompt, temperature, encoder, controller);
+          }
+
           controller.close();
         } catch (err) {
           enc(`\n\n> **Error:** ${friendlyError(err)}`);
