@@ -22,9 +22,10 @@ function compressTranscript(text: string): string {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// Groq llama-3.1-8b-instant: 30K TPM. Extraction prompt ~150 tokens + transcript.
-// Keep transcript under 28K chars (~7K tokens) so there's headroom for the response.
-const GROQ_EXTRACT_MAX_CHARS = 28_000;
+// Groq free tier: 6K–30K TPM depending on model. Extraction prompt ~150 tokens.
+// Keep transcript under 18K chars (~4.5K tokens) so a single call stays well
+// under even the tightest 6K TPM limit and leaves headroom for extraction output.
+const GROQ_EXTRACT_MAX_CHARS = 18_000;
 
 function isGeminiModel(m: string) { return m.startsWith('gemini'); }
 
@@ -74,7 +75,7 @@ async function extractWithGroq(
         messages: [{ role: 'user', content: prompt }],
         stream: false,
         temperature,
-        max_tokens: 1200,
+        max_tokens: 800,
       });
       return res.choices[0]?.message?.content ?? '';
     } catch (err) {
@@ -103,6 +104,30 @@ async function extractWithGemini(
     }
   }
   return '';
+}
+
+// Wrapper that tries Groq first, then Gemini, for Phase 1 extraction
+async function extractFacts(
+  groqKey: string, geminiKey: string, geminiModel: string,
+  transcript: string, type: AnalysisType, temperature: number,
+  enc: (s: string) => void
+): Promise<string> {
+  if (groqKey) {
+    try {
+      return await extractWithGroq(groqKey, transcript, type, temperature);
+    } catch (err) {
+      if (isRateLimitError(err) && geminiKey) {
+        enc(`> ⚡ Groq rate limited on extraction — switching to Gemini.\n\n`);
+        // Fall through to Gemini below
+      } else {
+        throw err;
+      }
+    }
+  }
+  if (geminiKey) {
+    return await extractWithGemini(geminiKey, geminiModel, transcript, type, temperature);
+  }
+  throw new Error('No API key available for extraction phase.');
 }
 
 // ── Phase 2: Evaluate from facts (streaming, Gemini) ─────────────────────────
@@ -193,22 +218,19 @@ export async function POST(request: NextRequest) {
             enc(`> ℹ️ Transcript compressed — removed ${savedChars.toLocaleString()} chars of timestamps & filler words.\n\n`);
           }
           if (truncated) {
-            enc(`> ⚠️ Transcript trimmed to 28 000 chars for extraction (Groq token limit).\n\n`);
+            enc(`> ⚠️ Transcript trimmed to 18 000 chars for extraction (fits within Groq free-tier token limit).\n\n`);
           }
 
           // ── Phase 1: Extract structured facts from transcript ─────────────
-          // Groq reads the heavy transcript; Gemini only sees the tiny output.
+          // Groq reads the heavy transcript; Phase 2 only sees the tiny output.
+          // Falls back to Gemini automatically if Groq is rate-limited.
           enc(`> 🔍 **Phase 1 of 2** — Reading transcript & extracting key data...\n\n`);
 
-          let extractedFacts = '';
-
-          if (groqKey) {
-            extractedFacts = await extractWithGroq(groqKey, extractTranscript, analysisType, temperature);
-          } else {
-            // No Groq key — Gemini does extraction too (still saves tokens on eval pass)
-            const extractModel = isGeminiModel(selectedModel) ? selectedModel : 'gemini-1.5-flash';
-            extractedFacts = await extractWithGemini(geminiKey, extractModel, compressed, analysisType, temperature);
-          }
+          const extractModel    = isGeminiModel(selectedModel) ? selectedModel : 'gemini-1.5-flash';
+          const extractedFacts  = await extractFacts(
+            groqKey, geminiKey, extractModel,
+            extractTranscript, analysisType, temperature, enc
+          );
 
           if (!extractedFacts.trim()) {
             enc(`\n\n> **Error:** Extraction phase returned empty output. Please try again.`);
