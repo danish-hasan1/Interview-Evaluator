@@ -25,11 +25,27 @@ const MODEL_GROUPS = [
     ],
   },
   {
-    label: '⚡ Groq  —  Fast (12K token/min free tier)',
+    label: '⚡ Groq  —  Fast (12K–30K token/min free tier)',
     models: [
       { value: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B Instant',    badge: '30K TPM',  badgeVariant: 'success' as const },
       { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', badge: '12K TPM',  badgeVariant: 'warning' as const },
       { value: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B',            badge: '5K TPM',   badgeVariant: 'warning' as const },
+    ],
+  },
+  {
+    label: '🔀 OpenRouter  —  Free models, separate rate limits',
+    models: [
+      { value: 'meta-llama/llama-3.1-8b-instruct:free',  label: 'Llama 3.1 8B (free)',  badge: 'Free', badgeVariant: 'success' as const },
+      { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (free)', badge: 'Free', badgeVariant: 'success' as const },
+      { value: 'mistralai/mistral-7b-instruct:free',     label: 'Mistral 7B (free)',     badge: 'Free', badgeVariant: 'success' as const },
+      { value: 'google/gemma-2-9b-it:free',              label: 'Gemma 2 9B (free)',     badge: 'Free', badgeVariant: 'teal'    as const },
+    ],
+  },
+  {
+    label: '🟠 Mistral AI  —  Free tier available',
+    models: [
+      { value: 'open-mistral-nemo',    label: 'Mistral Nemo',  badge: 'Free tier', badgeVariant: 'success' as const },
+      { value: 'mistral-small-latest', label: 'Mistral Small', badge: 'Fast',      badgeVariant: 'info'    as const },
     ],
   },
 ];
@@ -103,7 +119,7 @@ export function SettingsPanel() {
             </div>
             <div>
               <CardTitle className="text-base">API Keys</CardTitle>
-              <CardDescription>Configure your AI provider keys</CardDescription>
+              <CardDescription>Add as many keys as you have — unused ones become automatic fallbacks</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -118,15 +134,39 @@ export function SettingsPanel() {
             onChange={(v) => set({ geminiApiKey: v })}
           />
           <div className="border-t border-border" />
+          <div className="border-t border-border" />
           <ApiKeyInput
             id="groqKey"
-            label="Groq API Key  (fast but 12K token/min limit on free tier)"
+            label="Groq  (fast, 12K–30K token/min free tier)"
             placeholder="gsk_..."
             value={localSettings.groqApiKey}
             link="https://console.groq.com"
             linkLabel="console.groq.com"
             onChange={(v) => set({ groqApiKey: v })}
           />
+          <div className="border-t border-border" />
+          <ApiKeyInput
+            id="openrouterKey"
+            label="OpenRouter  (free models, independent rate limits)"
+            placeholder="sk-or-..."
+            value={localSettings.openrouterApiKey}
+            link="https://openrouter.ai/keys"
+            linkLabel="openrouter.ai"
+            onChange={(v) => set({ openrouterApiKey: v })}
+          />
+          <div className="border-t border-border" />
+          <ApiKeyInput
+            id="mistralKey"
+            label="Mistral AI  (free tier available)"
+            placeholder="..."
+            value={localSettings.mistralApiKey}
+            link="https://console.mistral.ai/api-keys"
+            linkLabel="console.mistral.ai"
+            onChange={(v) => set({ mistralApiKey: v })}
+          />
+          <div className="rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+            <strong>Automatic fallback:</strong> If your primary provider hits a rate limit, the app silently tries the next configured provider — Groq → OpenRouter → Mistral → Gemini. Add all keys you have for maximum reliability.
+          </div>
         </CardContent>
       </Card>
 
@@ -170,7 +210,7 @@ export function SettingsPanel() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Gemini models have no practical token limit for long transcripts. Groq free tier is limited to ~12 000 tokens/min.
+              Gemini has no practical token limit. Groq free tier is 12–30K tokens/min. OpenRouter &amp; Mistral free tiers have independent limits.
             </p>
           </div>
 

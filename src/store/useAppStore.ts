@@ -40,6 +40,8 @@ interface AppState {
 const defaultSettings: AppSettings = {
   groqApiKey: '',
   geminiApiKey: '',
+  openrouterApiKey: '',
+  mistralApiKey: '',
   model: 'gemini-1.5-flash',
   temperature: 0.3,
   maxTokens: 32768,

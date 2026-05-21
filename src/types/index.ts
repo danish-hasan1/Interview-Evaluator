@@ -12,6 +12,8 @@ export interface AnalysisHistory {
 export interface AppSettings {
   groqApiKey: string;
   geminiApiKey: string;
+  openrouterApiKey: string;
+  mistralApiKey: string;
   model: string;
   temperature: number;
   maxTokens: number;
