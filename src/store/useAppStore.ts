@@ -7,6 +7,7 @@ import type { AnalysisType, AnalysisHistory, AppSettings, ActiveView } from '@/t
 interface AppState {
   // Core analysis state
   transcript: string;
+  jobDescription: string;
   analysisType: AnalysisType;
   result: string;
   isLoading: boolean;
@@ -21,6 +22,7 @@ interface AppState {
 
   // Actions
   setTranscript: (transcript: string) => void;
+  setJobDescription: (jd: string) => void;
   setAnalysisType: (type: AnalysisType) => void;
   setResult: (result: string) => void;
   appendToResult: (chunk: string) => void;
@@ -52,6 +54,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       transcript: '',
+      jobDescription: '',
       analysisType: 'candidate',
       result: '',
       isLoading: false,
@@ -63,6 +66,7 @@ export const useAppStore = create<AppState>()(
       settings: defaultSettings,
 
       setTranscript: (transcript) => set({ transcript }),
+      setJobDescription: (jobDescription) => set({ jobDescription }),
       setAnalysisType: (analysisType) => set({ analysisType }),
       setResult: (result) => set({ result }),
       appendToResult: (chunk) =>
@@ -93,6 +97,7 @@ export const useAppStore = create<AppState>()(
       clearAll: () =>
         set({
           transcript: '',
+          jobDescription: '',
           result: '',
           error: null,
           uploadedFiles: [],

@@ -243,12 +243,18 @@ Important:
 EXTRACTED INTERVIEWER PATTERN DATA:
 `;
 
-export function buildEvaluationPrompt(type: AnalysisType, extractedFacts: string): string {
+function jdBlock(jd?: string): string {
+  if (!jd?.trim()) return '';
+  return `\nJOB DESCRIPTION (evaluate the candidate specifically against these requirements — note alignment and gaps):\n${jd.trim()}\n`;
+}
+
+export function buildEvaluationPrompt(type: AnalysisType, extractedFacts: string, jd?: string): string {
+  const jdSuffix = jdBlock(jd);
   switch (type) {
-    case 'candidate':        return CANDIDATE_EVAL + extractedFacts;
-    case 'interviewer':      return INTERVIEWER_EVAL + extractedFacts;
-    case 'taSummary':        return TA_SUMMARY_EVAL + extractedFacts;
-    case 'interviewerAudit': return AUDIT_EVAL + extractedFacts;
-    default:                 return CANDIDATE_EVAL + extractedFacts;
+    case 'candidate':        return CANDIDATE_EVAL + extractedFacts + jdSuffix;
+    case 'interviewer':      return INTERVIEWER_EVAL + extractedFacts + jdSuffix;
+    case 'taSummary':        return TA_SUMMARY_EVAL + extractedFacts + jdSuffix;
+    case 'interviewerAudit': return AUDIT_EVAL + extractedFacts + jdSuffix;
+    default:                 return CANDIDATE_EVAL + extractedFacts + jdSuffix;
   }
 }

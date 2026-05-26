@@ -126,12 +126,18 @@ For each session/transcript, list:
 COMBINED TRANSCRIPTS:
 `;
 
-export function buildExtractionPrompt(type: AnalysisType, transcript: string): string {
+function jdBlock(jd?: string): string {
+  if (!jd?.trim()) return '';
+  return `JOB DESCRIPTION (use this to guide what role-specific skills and requirements to look for):\n${jd.trim()}\n\n`;
+}
+
+export function buildExtractionPrompt(type: AnalysisType, transcript: string, jd?: string): string {
+  const jdPrefix = jdBlock(jd);
   switch (type) {
-    case 'candidate':        return CANDIDATE_EXTRACT + transcript;
-    case 'interviewer':      return INTERVIEWER_EXTRACT + transcript;
-    case 'taSummary':        return TA_SUMMARY_EXTRACT + transcript;
-    case 'interviewerAudit': return AUDIT_EXTRACT + transcript;
-    default:                 return CANDIDATE_EXTRACT + transcript;
+    case 'candidate':        return jdPrefix + CANDIDATE_EXTRACT + transcript;
+    case 'interviewer':      return jdPrefix + INTERVIEWER_EXTRACT + transcript;
+    case 'taSummary':        return jdPrefix + TA_SUMMARY_EXTRACT + transcript;
+    case 'interviewerAudit': return jdPrefix + AUDIT_EXTRACT + transcript;
+    default:                 return jdPrefix + CANDIDATE_EXTRACT + transcript;
   }
 }

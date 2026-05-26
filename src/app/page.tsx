@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { ActionBar } from '@/components/layout/ActionBar';
 import { AnalysisTypeCard } from '@/components/analysis/AnalysisTypeCard';
+import { JobDescriptionInput } from '@/components/analysis/JobDescriptionInput';
 import { TranscriptInput } from '@/components/analysis/TranscriptInput';
 import { FileUpload } from '@/components/analysis/FileUpload';
 import { AnalysisResult } from '@/components/analysis/AnalysisResult';
@@ -16,8 +17,9 @@ import { Separator } from '@/components/ui/separator';
 
 function AnalysisView() {
   // Individual selectors — this component only re-renders when one of these changes
-  const transcript   = useAppStore((s) => s.transcript);
-  const analysisType = useAppStore((s) => s.analysisType);
+  const transcript      = useAppStore((s) => s.transcript);
+  const jobDescription  = useAppStore((s) => s.jobDescription);
+  const analysisType    = useAppStore((s) => s.analysisType);
   const result       = useAppStore((s) => s.result);
   const isLoading    = useAppStore((s) => s.isLoading);
   const settings     = useAppStore((s) => s.settings);
@@ -45,6 +47,7 @@ function AnalysisView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcript,
+          jobDescription,
           analysisType,
           settings: {
             groqApiKey:       settings.groqApiKey,
@@ -104,6 +107,12 @@ function AnalysisView() {
               Analysis Type
             </h3>
             <AnalysisTypeCard />
+          </section>
+
+          <Separator />
+
+          <section>
+            <JobDescriptionInput />
           </section>
 
           <Separator />

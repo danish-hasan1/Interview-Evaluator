@@ -63,10 +63,10 @@ function friendlyError(err: unknown): string {
 
 // ── Phase 1: Extract facts (non-streaming, Groq) ──────────────────────────────
 async function extractWithGroq(
-  apiKey: string, transcript: string, type: AnalysisType, temperature: number
+  apiKey: string, transcript: string, type: AnalysisType, temperature: number, jd?: string
 ): Promise<string> {
   const groq   = new Groq({ apiKey });
-  const prompt = buildExtractionPrompt(type, transcript);
+  const prompt = buildExtractionPrompt(type, transcript, jd);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -88,11 +88,11 @@ async function extractWithGroq(
 
 // ── Phase 1: Extract facts (non-streaming, Gemini fallback) ──────────────────
 async function extractWithGemini(
-  apiKey: string, model: string, transcript: string, type: AnalysisType, temperature: number
+  apiKey: string, model: string, transcript: string, type: AnalysisType, temperature: number, jd?: string
 ): Promise<string> {
   const genAI  = new GoogleGenerativeAI(apiKey);
   const gemini = genAI.getGenerativeModel({ model, generationConfig: { temperature, maxOutputTokens: 1200 } });
-  const prompt = buildExtractionPrompt(type, transcript);
+  const prompt = buildExtractionPrompt(type, transcript, jd);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -110,11 +110,11 @@ async function extractWithGemini(
 async function extractFacts(
   groqKey: string, geminiKey: string, geminiModel: string,
   transcript: string, type: AnalysisType, temperature: number,
-  enc: (s: string) => void
+  enc: (s: string) => void, jd?: string
 ): Promise<string> {
   if (groqKey) {
     try {
-      return await extractWithGroq(groqKey, transcript, type, temperature);
+      return await extractWithGroq(groqKey, transcript, type, temperature, jd);
     } catch (err) {
       if (isRateLimitError(err) && geminiKey) {
         enc(`> ⚡ Groq rate limited on extraction — switching to Gemini.\n\n`);
@@ -125,7 +125,7 @@ async function extractFacts(
     }
   }
   if (geminiKey) {
-    return await extractWithGemini(geminiKey, geminiModel, transcript, type, temperature);
+    return await extractWithGemini(geminiKey, geminiModel, transcript, type, temperature, jd);
   }
   throw new Error('No API key available for extraction phase.');
 }
@@ -183,8 +183,8 @@ async function streamEvalGroq(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { transcript, analysisType, settings }: {
-      transcript: string; analysisType: AnalysisType; settings?: Partial<AppSettings>;
+    const { transcript, jobDescription, analysisType, settings }: {
+      transcript: string; jobDescription?: string; analysisType: AnalysisType; settings?: Partial<AppSettings>;
     } = body;
 
     if (!transcript?.trim()) {
@@ -226,10 +226,13 @@ export async function POST(request: NextRequest) {
           // Falls back to Gemini automatically if Groq is rate-limited.
           enc(`> 🔍 **Phase 1 of 2** — Reading transcript & extracting key data...\n\n`);
 
+          const jd = jobDescription?.trim() || undefined;
+          if (jd) enc(`> 📋 Job description provided — analysis will be evaluated against role requirements.\n\n`);
+
           const extractModel    = isGeminiModel(selectedModel) ? selectedModel : 'gemini-1.5-flash';
           const extractedFacts  = await extractFacts(
             groqKey, geminiKey, extractModel,
-            extractTranscript, analysisType, temperature, enc
+            extractTranscript, analysisType, temperature, enc, jd
           );
 
           if (!extractedFacts.trim()) {
@@ -243,7 +246,7 @@ export async function POST(request: NextRequest) {
           // Use the user's selected (higher-quality) model for the evaluation pass.
           enc(`\n\n> 📊 **Phase 2 of 2** — Generating evaluation from extracted data...\n\n---\n\n`);
 
-          const evalPrompt       = buildEvaluationPrompt(analysisType, extractedFacts);
+          const evalPrompt       = buildEvaluationPrompt(analysisType, extractedFacts, jd);
           const useGeminiForEval = isGeminiModel(selectedModel) && !!geminiKey;
 
           if (useGeminiForEval) {
