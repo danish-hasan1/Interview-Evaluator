@@ -21,11 +21,28 @@ function compressTranscript(text: string): string {
     .trim();
 }
 
+// Truncate each speaker turn to its first sentence (max 160 chars).
+// Converts a 44K-char transcript → ~6-8K chars while preserving every question
+// asked and the opening of every answer — enough for accurate extraction.
+function truncateTurns(text: string): string {
+  return text
+    .split('\n')
+    .map(line => {
+      const t = line.trim();
+      if (t.length <= 160) return t;
+      const sentenceEnd = t.search(/[.!?]\s/);
+      if (sentenceEnd > 0 && sentenceEnd < 160) return t.slice(0, sentenceEnd + 1);
+      const wordBoundary = t.lastIndexOf(' ', 160);
+      return t.slice(0, wordBoundary > 80 ? wordBoundary : 160) + '…';
+    })
+    .filter(l => l.length > 5)
+    .join('\n');
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// Groq free tier: 6K–30K TPM depending on model. Extraction prompt ~150 tokens.
-// Keep transcript under 18K chars (~4.5K tokens) so a single call stays well
-// under even the tightest 6K TPM limit and leaves headroom for extraction output.
-const GROQ_EXTRACT_MAX_CHARS = 18_000;
+// After truncateTurns(), a 44K-char transcript is ~6-8K chars (~1.5-2K tokens).
+// Hard cap at 10K chars as a safety net.
+const GROQ_EXTRACT_MAX_CHARS = 10_000;
 
 function isGeminiModel(m: string) { return m.startsWith('gemini'); }
 
@@ -202,10 +219,11 @@ export async function POST(request: NextRequest) {
         { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Compress + truncate for Phase 1 (Groq extraction)
-    const compressed = compressTranscript(transcript);
-    const savedChars = transcript.length - compressed.length;
-    const { text: extractTranscript, truncated } = truncate(compressed, GROQ_EXTRACT_MAX_CHARS);
+    // Compress → turn-truncate → hard cap for Phase 1 (Groq extraction)
+    const compressed      = compressTranscript(transcript);
+    const turnTruncated   = truncateTurns(compressed);
+    const savedChars      = transcript.length - turnTruncated.length;
+    const { text: extractTranscript, truncated } = truncate(turnTruncated, GROQ_EXTRACT_MAX_CHARS);
 
     const encoder  = new TextEncoder();
     const readable = new ReadableStream({
@@ -215,10 +233,10 @@ export async function POST(request: NextRequest) {
         try {
           // ── Header notes ──────────────────────────────────────────────────
           if (savedChars > 500) {
-            enc(`> ℹ️ Transcript compressed — removed ${savedChars.toLocaleString()} chars of timestamps & filler words.\n\n`);
+            enc(`> ℹ️ Transcript compressed to ~${turnTruncated.length.toLocaleString()} chars for extraction (timestamps, fillers & turn verbosity removed).\n\n`);
           }
           if (truncated) {
-            enc(`> ⚠️ Transcript trimmed to 18 000 chars for extraction (fits within Groq free-tier token limit).\n\n`);
+            enc(`> ⚠️ Transcript hard-capped at 10 000 chars for extraction.\n\n`);
           }
 
           // ── Phase 1: Extract structured facts from transcript ─────────────

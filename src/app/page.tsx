@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
@@ -31,7 +32,8 @@ function AnalysisView() {
   const setError      = useAppStore((s) => s.setError);
   const addToHistory  = useAppStore((s) => s.addToHistory);
 
-  const showResult = result.length > 0 || isLoading || !!error;
+  const showResult  = result.length > 0 || isLoading || !!error;
+  const resultRef   = useRef<HTMLDivElement>(null);
 
   const handleAnalyze = async () => {
     if (!transcript.trim()) return;
@@ -40,6 +42,11 @@ function AnalysisView() {
     setError(null);
     setLoading(true);
     setStreaming(true);
+
+    // Give the result section one frame to mount, then scroll it into view
+    requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
 
     try {
       const response = await fetch('/api/analyze', {
@@ -127,9 +134,9 @@ function AnalysisView() {
             <TranscriptInput />
           </section>
 
-          {/* Result — rendered conditionally without AnimatePresence to avoid remount blink */}
+          {/* Result — scroll anchor attached so handleAnalyze can jump to it */}
           {showResult && (
-            <section>
+            <section ref={resultRef}>
               <Separator className="mb-6" />
               <AnalysisResult />
             </section>
